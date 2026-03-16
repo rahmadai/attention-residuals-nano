@@ -38,6 +38,7 @@ class Trainer:
         
         self.losses = []
         self.start_step = 0
+        self._last_val_step = -1
     
     def get_lr(self, step: int) -> float:
         """Get learning rate with warmup and cosine decay"""
@@ -166,10 +167,27 @@ class Trainer:
                     print(msg)
                 
                 self.log(step, avg_train, avg_val, lr)
+                self._last_val_step = step
                 
                 # Save checkpoint
                 ckpt_path = self.save_checkpoint(step, avg_val)
                 if not progress_bar:
                     print(f"Saved checkpoint: {ckpt_path}")
+        
+        # Final validation if never run (short runs)
+        if len(self.losses) > 0 and self._last_val_step < 0:
+            final_step = config.max_steps - 1
+            lr = self.get_lr(final_step)
+            avg_train = sum(self.losses) / len(self.losses)
+            avg_val = self.validate(val_loader)
+            
+            msg = f"*** Final Step {final_step} | Train: {avg_train:.4f} | Val: {avg_val:.4f}"
+            if progress_bar:
+                tqdm.write(msg)
+            else:
+                print(msg)
+            
+            self.log(final_step, avg_train, avg_val, lr)
+            self.save_checkpoint(final_step, avg_val)
         
         self.close()
