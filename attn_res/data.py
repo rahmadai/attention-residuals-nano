@@ -3,7 +3,7 @@ Nano Attention Residuals - Data loading utilities
 """
 import torch
 from torch.utils.data import DataLoader, IterableDataset
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Any
 
 # Try to import HF datasets
 try:
@@ -33,7 +33,7 @@ class DummyDataset(IterableDataset):
             yield {"input_ids": seq, "labels": seq}
 
 
-def get_dataloader(config, split: str = "train") -> Tuple[DataLoader, Optional]:
+def get_dataloader(config, split: str = "train") -> Tuple[DataLoader, Optional[Any]]:
     """
     Get dataloader for training or validation
     
