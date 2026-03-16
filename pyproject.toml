@@ -4,9 +4,6 @@ version = "0.1.0"
 description = "Nano Attention Residuals - Minimal replication of Block Attention Residuals"
 readme = "README.md"
 requires-python = ">=3.10"
-authors = [
-    { name = "Researcher" }
-]
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
