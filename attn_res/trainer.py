@@ -52,10 +52,14 @@ class Trainer:
             progress = (step - config.warmup_steps) / (config.max_steps - config.warmup_steps)
             return config.learning_rate * 0.5 * (1 + math.cos(math.pi * progress))
     
-    def train_step(self, input_ids: torch.Tensor, targets: torch.Tensor) -> float:
-        """Single training step, returns loss"""
+    def train_step(self, input_ids: torch.Tensor, targets: torch.Tensor, 
+                   accumulation_step: int = 0, accumulation_steps: int = 1) -> float:
+        """Single training step, returns loss. Supports gradient accumulation."""
         input_ids = input_ids.to(self.device)
         targets = targets.to(self.device)
+        
+        # Scale loss for gradient accumulation
+        scale = 1.0 / accumulation_steps
         
         # Forward with autocast for bfloat16
         if self.dtype == torch.bfloat16 and self.device.type == "cuda":
@@ -64,14 +68,20 @@ class Trainer:
         else:
             logits, loss = self.model(input_ids, targets)
         
+        # Scale loss for accumulation
+        loss = loss * scale
+        
         # Backward
         loss.backward()
-        grad_norm = torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.config.grad_clip)
-        self.grad_norms.append(grad_norm.item())
-        self.optimizer.step()
-        self.optimizer.zero_grad()
         
-        return loss.item()
+        # Only update on last accumulation step
+        if accumulation_step == accumulation_steps - 1:
+            grad_norm = torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.config.grad_clip)
+            self.grad_norms.append(grad_norm.item())
+            self.optimizer.step()
+            self.optimizer.zero_grad()
+        
+        return loss.item() * accumulation_steps  # Return unscaled loss
     
     @torch.no_grad()
     def validate(self, val_loader, max_batches: int = 20) -> float:

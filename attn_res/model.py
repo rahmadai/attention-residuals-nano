@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from typing import List, Optional, Tuple
+from torch.utils.checkpoint import checkpoint
 
 
 class RMSNorm(nn.Module):
@@ -67,10 +68,11 @@ class BlockAttnRes(nn.Module):
 
 class TransformerBlock(nn.Module):
     """Transformer layer with optional Block Attention Residuals"""
-    def __init__(self, layer_idx: int, config, log_attentions: bool = False):
+    def __init__(self, layer_idx: int, config, log_attentions: bool = False, use_checkpoint: bool = True):
         super().__init__()
         self.layer_idx = layer_idx
         self.config = config
+        self.use_checkpoint = use_checkpoint
         
         # Standard PreNorm
         self.attn_norm = RMSNorm(config.dim)
