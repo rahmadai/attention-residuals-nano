@@ -44,7 +44,6 @@ def get_dataloader(config, split: str = "train") -> Tuple[DataLoader, Optional[A
         try:
             # Load TinyStories
             ds = load_dataset("roneneldan/TinyStories", split="train" if split=="train" else "validation")
-            ds = ds.select(range(1000 if split=="train" else 100))
             
             tokenizer = AutoTokenizer.from_pretrained("gpt2")
             tokenizer.pad_token = tokenizer.eos_token

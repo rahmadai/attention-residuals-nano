@@ -40,7 +40,7 @@ def main():
     model = GPT(config)
     print(f"Mode: {'AttnRes' if config.use_attn_res else 'Baseline'}")
     print(f"Parameters: {model.count_params():.2f}M")
-    print(f"Blocks: {config.n_layer // config.block_size}, Block size: {config.block_size}")
+    print(f"Block count: {config.n_layer // config.block_size}, Block size: {config.block_size}")
     print(f"Batch size: {config.batch_size}, Seq len: {config.seq_len}")
     print(f"Steps: {config.max_steps}")
     
