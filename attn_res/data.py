@@ -33,19 +33,25 @@ class DummyDataset(IterableDataset):
             yield {"input_ids": seq, "labels": seq}
 
 
-def get_dataloader(config, split: str = "train") -> Tuple[DataLoader, Optional[Any]]:
+def get_dataloader(config, split: str = "train", use_dummy: bool = False) -> Tuple[DataLoader, Optional[Any]]:
     """
     Get dataloader for training or validation
     
     Returns:
         (dataloader, tokenizer) - tokenizer is None if using dummy data
     """
-    if HF_AVAILABLE:
+    if HF_AVAILABLE and not use_dummy:
         try:
             # Load TinyStories
             ds = load_dataset("roneneldan/TinyStories", split="train" if split=="train" else "validation")
             
-            tokenizer = AutoTokenizer.from_pretrained("gpt2")
+            # Use a small tokenizer that matches our vocab size
+            try:
+                tokenizer = AutoTokenizer.from_pretrained("gpt2")
+                # Resize tokenizer vocab to match model
+                tokenizer.model_max_length = config.seq_len
+            except Exception:
+                tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-neo-125M")
             tokenizer.pad_token = tokenizer.eos_token
             
             def collate_fn(examples):
@@ -58,9 +64,18 @@ def get_dataloader(config, split: str = "train") -> Tuple[DataLoader, Optional[A
                     return_tensors="pt"
                 )
                 input_ids = tokens["input_ids"]
+                # Clamp to vocab size (tokenizer may have larger vocab than model)
+                # GPT-2 vocab is 50257, but model vocab is 32000
+                max_token_id = config.vocab_size - 1
+                eos_id = min(tokenizer.eos_token_id, max_token_id)
+                
+                # Replace any token > max with a valid token (0 = padding/unknown)
+                input_ids = torch.where(input_ids > max_token_id, torch.tensor(0), input_ids)
+                input_ids = torch.where(input_ids < 0, torch.tensor(0), input_ids)
+                
                 targets = input_ids.clone()
                 targets[:, :-1] = input_ids[:, 1:]
-                targets[:, -1] = tokenizer.eos_token_id
+                targets[:, -1] = eos_id
                 return input_ids, targets
             
         except Exception as e:

@@ -9,7 +9,7 @@ from typing import Optional
 class Config:
     """Base configuration"""
     # Model Architecture
-    vocab_size: int = 32000
+    vocab_size: int = 32000  # Smaller vocab to save memory (GPT-2 has 50257)
     n_layer: int = 12          # Must be divisible by block_size
     n_head: int = 8
     dim: int = 512
@@ -56,7 +56,7 @@ class MacConfig(Config):
 class GPUConfig(Config):
     """Configuration for GPU training (RunPod L40)"""
     batch_size: int = 512      # Full batch size for L40
-    seq_len: int = 2048        # Full sequence length
+    seq_len: int = 1024        # Reduced for memory (was 2048)
     max_steps: int = 2000      # Full training run
     val_every: int = 200
     warmup_steps: int = 200
