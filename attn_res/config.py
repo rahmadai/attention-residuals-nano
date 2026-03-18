@@ -26,7 +26,7 @@ class Config:
     seq_len: int = 512
     max_steps: int = 10
     val_every: int = 5
-    learning_rate: float = 3e-4
+    learning_rate: float = 1e-4  # Lower LR for stability
     weight_decay: float = 0.1
     grad_clip: float = 1.0
     warmup_steps: int = 2

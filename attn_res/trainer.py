@@ -76,6 +76,22 @@ class Trainer:
         
         # Only update on last accumulation step
         if accumulation_step == accumulation_steps - 1:
+            # Check for inf/nan before clipping
+            total_norm = 0.0
+            has_inf = False
+            for p in self.model.parameters():
+                if p.grad is not None:
+                    param_norm = p.grad.data.norm(2)
+                    if torch.isinf(param_norm) or torch.isnan(param_norm):
+                        has_inf = True
+                    total_norm += param_norm.item() ** 2
+            total_norm = total_norm ** 0.5
+            
+            if has_inf:
+                print(f"WARNING: Inf/NaN detected in gradients! Skipping step.")
+                self.optimizer.zero_grad()
+                return loss.item() * accumulation_steps
+            
             grad_norm = torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.config.grad_clip)
             self.grad_norms.append(grad_norm.item())
             self.optimizer.step()

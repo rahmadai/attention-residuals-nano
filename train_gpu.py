@@ -36,7 +36,7 @@ def main():
     
     # Device setup
     device = torch.device("cuda")
-    dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
+    dtype = torch.float32  # Use float32 for stability (was bfloat16)
     
     print(f"Device: {device} | Dtype: {dtype}")
     
