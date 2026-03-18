@@ -24,12 +24,16 @@ class BlockAttnRes(nn.Module):
     https://github.com/MoonshotAI/Attention-Residuals/blob/master/Attention_Residuals.pdf
     Computes softmax attention over block representations + current partial block.
     """
-    def __init__(self, dim: int):
+    def __init__(self, dim: int, log_attentions: bool = False):
         super().__init__()
         # Pseudo-query w_l: learned vector per layer (Section 3.1)
         # CRITICAL: Zero init (Section 5 - Training Stability)
         self.query = nn.Parameter(torch.zeros(dim))
         self.norm = RMSNorm(dim)
+        
+        # For analysis: store attention weights
+        self.log_attentions = log_attentions
+        self.attention_log = []  # List of [num_sources] tensors
         
     def forward(self, blocks: List[torch.Tensor], partial_block: torch.Tensor) -> torch.Tensor:
         """
@@ -52,6 +56,10 @@ class BlockAttnRes(nn.Module):
         # Softmax over depth (sources dimension)
         alpha = logits.softmax(dim=0)  # [num_sources, b, t]
         
+        # Log attention weights for analysis (average over batch and seq)
+        if self.log_attentions and not self.training:
+            self.attention_log.append(alpha.mean(dim=(1, 2)).detach().cpu())
+        
         # Weighted sum
         out = torch.einsum('n b t, n b t d -> b t d', alpha, sources)
         return out
@@ -59,7 +67,7 @@ class BlockAttnRes(nn.Module):
 
 class TransformerBlock(nn.Module):
     """Transformer layer with optional Block Attention Residuals"""
-    def __init__(self, layer_idx: int, config):
+    def __init__(self, layer_idx: int, config, log_attentions: bool = False):
         super().__init__()
         self.layer_idx = layer_idx
         self.config = config
@@ -81,8 +89,8 @@ class TransformerBlock(nn.Module):
         
         # AttnRes mechanism
         if config.use_attn_res:
-            self.attn_res_attn = BlockAttnRes(config.dim)
-            self.attn_res_mlp = BlockAttnRes(config.dim)
+            self.attn_res_attn = BlockAttnRes(config.dim, log_attentions=log_attentions)
+            self.attn_res_mlp = BlockAttnRes(config.dim, log_attentions=log_attentions)
     
     def forward(
         self, 
@@ -135,13 +143,13 @@ class TransformerBlock(nn.Module):
 
 class GPT(nn.Module):
     """GPT model with Block Attention Residuals support"""
-    def __init__(self, config):
+    def __init__(self, config, log_attentions: bool = False):
         super().__init__()
         self.config = config
         
         self.token_emb = nn.Embedding(config.vocab_size, config.dim)
         self.layers = nn.ModuleList([
-            TransformerBlock(i, config) for i in range(config.n_layer)
+            TransformerBlock(i, config, log_attentions=log_attentions) for i in range(config.n_layer)
         ])
         self.norm = RMSNorm(config.dim)
         self.head = nn.Linear(config.dim, config.vocab_size, bias=False)

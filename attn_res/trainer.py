@@ -34,7 +34,10 @@ class Trainer:
         log_path = os.path.join(config.out_dir, f"{mode_str}_log.csv")
         self.log_file = open(log_path, "w", newline="")
         self.log_writer = csv.writer(self.log_file)
-        self.log_writer.writerow(["step", "train_loss", "val_loss", "lr"])
+        self.log_writer.writerow(["step", "train_loss", "val_loss", "lr", "grad_norm"])
+        
+        # For tracking gradient norms
+        self.grad_norms = []
         
         self.losses = []
         self.start_step = 0
@@ -63,7 +66,8 @@ class Trainer:
         
         # Backward
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.config.grad_clip)
+        grad_norm = torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.config.grad_clip)
+        self.grad_norms.append(grad_norm.item())
         self.optimizer.step()
         self.optimizer.zero_grad()
         
@@ -107,8 +111,10 @@ class Trainer:
     
     def log(self, step: int, train_loss: float, val_loss: float, lr: float):
         """Log metrics to CSV"""
-        self.log_writer.writerow([step, train_loss, val_loss, lr])
+        avg_grad_norm = sum(self.grad_norms) / len(self.grad_norms) if self.grad_norms else 0.0
+        self.log_writer.writerow([step, train_loss, val_loss, lr, f"{avg_grad_norm:.4f}"])
         self.log_file.flush()
+        self.grad_norms = []  # Reset for next period
     
     def close(self):
         """Close log file"""
