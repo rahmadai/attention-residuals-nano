@@ -18,6 +18,8 @@ def main():
                        help="Training steps (default: 2000 = ~2B tokens)")
     parser.add_argument("--resume", type=str, default=None,
                        help="Resume from checkpoint path")
+    parser.add_argument("--dummy", action="store_true",
+                       help="Use dummy data instead of TinyStories (for testing)")
     args = parser.parse_args()
     
     # Create config
@@ -46,8 +48,8 @@ def main():
     
     # Load data
     print("Loading data...")
-    train_loader, tokenizer = get_dataloader(config, "train")
-    val_loader, _ = get_dataloader(config, "validation")
+    train_loader, tokenizer = get_dataloader(config, "train", use_dummy=args.dummy)
+    val_loader, _ = get_dataloader(config, "validation", use_dummy=args.dummy)
     
     # Train
     print(f"\nStarting training...")
