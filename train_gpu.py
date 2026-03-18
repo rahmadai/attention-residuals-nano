@@ -20,6 +20,8 @@ def main():
                        help="Resume from checkpoint path")
     parser.add_argument("--dummy", action="store_true",
                        help="Use dummy data instead of TinyStories (for testing)")
+    parser.add_argument("--grad_accum", type=int, default=1,
+                       help="Gradient accumulation steps (default: 1)")
     args = parser.parse_args()
     
     # Create config
@@ -40,6 +42,7 @@ def main():
     
     # Create model
     model = GPT(config)
+    model = model.to(dtype=dtype)  # Convert to bfloat16
     print(f"Mode: {'AttnRes' if config.use_attn_res else 'Baseline'}")
     print(f"Parameters: {model.count_params():.2f}M")
     print(f"Block count: {config.n_layer // config.block_size}, Block size: {config.block_size}")
