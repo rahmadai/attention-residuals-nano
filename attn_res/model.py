@@ -25,12 +25,13 @@ class BlockAttnRes(nn.Module):
     https://github.com/MoonshotAI/Attention-Residuals/blob/master/Attention_Residuals.pdf
     Computes softmax attention over block representations + current partial block.
     """
-    def __init__(self, dim: int, log_attentions: bool = False):
+    def __init__(self, dim: int, log_attentions: bool = False, temperature: float = 0.1):
         super().__init__()
         # Pseudo-query w_l: learned vector per layer (Section 3.1)
         # CRITICAL: Zero init (Section 5 - Training Stability)
         self.query = nn.Parameter(torch.zeros(dim))
         self.norm = RMSNorm(dim)
+        self.temperature = temperature  # Softmax temperature for stability
         
         # For analysis: store attention weights
         self.log_attentions = log_attentions
@@ -45,17 +46,42 @@ class BlockAttnRes(nn.Module):
         if len(blocks) == 0:
             return partial_block
         
+        # Debug: Check inputs
+        if torch.isnan(partial_block).any() or torch.isinf(partial_block).any():
+            print(f"WARNING: partial_block has NaN/Inf!")
+        
         # Stack all sources: [num_sources, batch, seq, dim]
-        sources = torch.stack(blocks + [partial_block], dim=0)
+        # Detach blocks to prevent gradient explosion through attention mechanism
+        # Gradients still flow through partial_block and attention weights
+        detached_blocks = [b.detach() for b in blocks]
+        sources = torch.stack(detached_blocks + [partial_block], dim=0)
+        
+        # Debug: Check sources
+        if torch.isnan(sources).any() or torch.isinf(sources).any():
+            print(f"WARNING: sources has NaN/Inf! Shape: {sources.shape}")
         
         # Keys: RMSNorm of sources
         keys = self.norm(sources)  # [num_sources, b, t, d]
         
+        # Debug: Check query
+        if torch.isnan(self.query).any() or torch.isinf(self.query).any():
+            print(f"WARNING: query has NaN/Inf! query: {self.query[:5]}")
+        
         # Compute logits: q^T @ k -> [num_sources, b, t]
         logits = torch.einsum('d,n b t d -> n b t', self.query, keys)
         
-        # Softmax over depth (sources dimension)
-        alpha = logits.softmax(dim=0)  # [num_sources, b, t]
+        # Debug: Check logits
+        if torch.isnan(logits).any() or torch.isinf(logits).any():
+            print(f"WARNING: logits has NaN/Inf! Shape: {logits.shape}, range: [{logits.min()}, {logits.max()}]")
+        
+        # Softmax over depth (sources dimension) with temperature for stability
+        # Temperature < 1 makes distribution sharper, > 1 makes it more uniform
+        # Using temperature helps prevent gradient explosion from sharp attention
+        alpha = (logits / self.temperature).softmax(dim=0)  # [num_sources, b, t]
+        
+        # Debug: Check alpha
+        if torch.isnan(alpha).any() or torch.isinf(alpha).any():
+            print(f"WARNING: alpha has NaN/Inf!")
         
         # Log attention weights for analysis (average over batch and seq)
         if self.log_attentions and not self.training:
