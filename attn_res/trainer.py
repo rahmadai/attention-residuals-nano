@@ -39,6 +39,10 @@ class Trainer:
         # For tracking gradient norms
         self.grad_norms = []
         
+        # Keep only latest N checkpoints
+        self.max_checkpoints = 5
+        self.checkpoint_history = []
+        
         self.losses = []
         self.start_step = 0
         self._last_val_step = -1
@@ -122,7 +126,7 @@ class Trainer:
         return sum(val_losses) / len(val_losses)
     
     def save_checkpoint(self, step: int, val_loss: float):
-        """Save model checkpoint"""
+        """Save model checkpoint, keep only latest N"""
         mode_str = 'attnres' if self.config.use_attn_res else 'baseline'
         ckpt = {
             'step': step,
@@ -133,6 +137,15 @@ class Trainer:
         }
         ckpt_path = os.path.join(self.config.out_dir, f"{mode_str}_ckpt_{step}.pt")
         torch.save(ckpt, ckpt_path)
+        
+        # Track checkpoint and delete old ones
+        self.checkpoint_history.append(ckpt_path)
+        if len(self.checkpoint_history) > self.max_checkpoints:
+            old_ckpt = self.checkpoint_history.pop(0)
+            if os.path.exists(old_ckpt):
+                os.remove(old_ckpt)
+                print(f"  Removed old checkpoint: {os.path.basename(old_ckpt)}")
+        
         return ckpt_path
     
     def log(self, step: int, train_loss: float, val_loss: float, lr: float):
