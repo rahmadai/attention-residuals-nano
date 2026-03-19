@@ -21,12 +21,20 @@ class Trainer:
         
         self.model.to(device)
         
-        self.optimizer = torch.optim.AdamW(
-            model.parameters(),
-            lr=config.learning_rate,
-            weight_decay=config.weight_decay,
-            betas=(0.9, 0.95)
-        )
+        # Use lower learning rate for BlockAttnRes query parameters
+        # This prevents gradient explosion in early training
+        attn_res_params = []
+        other_params = []
+        for name, param in model.named_parameters():
+            if 'attn_res' in name and 'query' in name:
+                attn_res_params.append(param)
+            else:
+                other_params.append(param)
+        
+        self.optimizer = torch.optim.AdamW([
+            {'params': other_params, 'lr': config.learning_rate, 'weight_decay': config.weight_decay},
+            {'params': attn_res_params, 'lr': config.learning_rate * 0.1, 'weight_decay': config.weight_decay}  # 10x lower
+        ], betas=(0.9, 0.95))
         
         # Setup logging
         os.makedirs(config.out_dir, exist_ok=True)

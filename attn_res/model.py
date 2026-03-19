@@ -25,13 +25,18 @@ class BlockAttnRes(nn.Module):
     https://github.com/MoonshotAI/Attention-Residuals/blob/master/Attention_Residuals.pdf
     Computes softmax attention over block representations + current partial block.
     """
-    def __init__(self, dim: int, log_attentions: bool = False, temperature: float = 0.1):
+    def __init__(self, dim: int, log_attentions: bool = False, temperature: float = 1.0):
         super().__init__()
         # Pseudo-query w_l: learned vector per layer (Section 3.1)
         # CRITICAL: Zero init (Section 5 - Training Stability)
         self.query = nn.Parameter(torch.zeros(dim))
         self.norm = RMSNorm(dim)
-        self.temperature = temperature  # Softmax temperature for stability
+        self.temperature = temperature  # Softmax temperature (1.0 = standard)
+        
+        # Scale query init to prevent early gradient explosion
+        # Small random init instead of exact zero helps stability
+        with torch.no_grad():
+            self.query.normal_(0, 0.01)  # Small random values, not exact zero
         
         # For analysis: store attention weights
         self.log_attentions = log_attentions
@@ -51,8 +56,8 @@ class BlockAttnRes(nn.Module):
             print(f"WARNING: partial_block has NaN/Inf!")
         
         # Stack all sources: [num_sources, batch, seq, dim]
-        # Detach blocks to prevent gradient explosion through attention mechanism
-        # Gradients still flow through partial_block and attention weights
+        # Detach blocks to prevent gradient explosion through history
+        # Only learn from current step, not backprop through all previous blocks
         detached_blocks = [b.detach() for b in blocks]
         sources = torch.stack(detached_blocks + [partial_block], dim=0)
         
@@ -136,7 +141,12 @@ class TransformerBlock(nn.Module):
         
         # --- Attention sub-layer ---
         if config.use_attn_res:
-            h = self.attn_res_attn(blocks, partial_block)
+            # Use AttnRes, but fall back to x when no blocks available yet
+            # This prevents zero signal at the start of training
+            if len(blocks) == 0:
+                h = x  # No completed blocks yet, use standard residual
+            else:
+                h = self.attn_res_attn(blocks, partial_block)
         else:
             h = x  # Standard residual
         
@@ -147,7 +157,11 @@ class TransformerBlock(nn.Module):
         
         # --- MLP sub-layer ---
         if config.use_attn_res:
-            h = self.attn_res_mlp(blocks, partial_block)
+            # Same fallback: use partial_block directly when no blocks yet
+            if len(blocks) == 0:
+                h = partial_block  # No completed blocks, use standard residual
+            else:
+                h = self.attn_res_mlp(blocks, partial_block)
         else:
             h = partial_block
         
