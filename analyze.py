@@ -6,7 +6,7 @@ Generates 3 figures:
   3. Effective depth heatmap
 
 Usage:
-  uv run python analyze.py --baseline outputs/gpu/baseline_log.csv --attnres outputs/gpu/attnres_log.csv
+  uv run python analyze.py --baseline outputs/baseline/baseline_log.csv --attnres outputs/attnres/attnres_log.csv --ckpt outputs/attnres/attnres_ckpt_51000.pt --out_dir outputs/analysis
 """
 import argparse
 import csv
@@ -14,7 +14,8 @@ import torch
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
-from attn_res import GPUConfig, GPT, get_dataloader
+from attn_res import GPUConfig, GPT
+from attn_res.data import get_dataloader
 
 
 def load_training_logs(log_path: str):
@@ -115,7 +116,7 @@ def extract_attention_weights(ckpt_path: str, config, device: torch.device, num_
     model = GPT(config, log_attentions=True)
     
     # Load checkpoint
-    ckpt = torch.load(ckpt_path, map_location=device)
+    ckpt = torch.load(ckpt_path, map_location=device, weights_only=False)
     model.load_state_dict(ckpt['model'])
     model.to(device)
     model.eval()
@@ -276,6 +277,8 @@ def main():
         
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         config = GPUConfig(use_attn_res=True)
+        config.batch_size = 16  # Small batch for analysis to save memory
+        config.num_workers = 0  # Avoid multiprocessing issues
         
         attention_data = extract_attention_weights(args.ckpt, config, device)
         effective_depths = plot_effective_depth_heatmap(
